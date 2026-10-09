@@ -41,4 +41,15 @@ describe('Health API integration tests', () => {
     expect(response.body.success).toBe(false);
     expect(response.body.error.code).toBe('NOT_FOUND');
   });
+  
+  test('returns 400 for invalid JSON request bodies', async () => {
+    const response = await request(app)
+      .post('/api/health')
+      .set('Content-Type', 'application/json')
+      .send('{"invalid":');
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+  });
+
 });
