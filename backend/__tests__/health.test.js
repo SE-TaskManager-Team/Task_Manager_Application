@@ -1,0 +1,44 @@
+
+jest.mock('mongoose', () => ({
+  connection: {
+    readyState: 0
+  }
+}));
+
+const request = require('supertest');
+const mongoose = require('mongoose');
+const app = require('../src/app');
+
+describe('Health API integration tests', () => {
+  beforeEach(() => {
+    mongoose.connection.readyState = 0;
+  });
+
+  test('returns 503 when the database is disconnected', async () => {
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).toBe(503);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('degraded');
+    expect(response.body.data.database.status).toBe('disconnected');
+  });
+
+  test('returns 200 when the database is connected', async () => {
+    mongoose.connection.readyState = 1;
+
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('healthy');
+    expect(response.body.data.database.status).toBe('connected');
+  });
+
+  test('returns 404 for an unknown route', async () => {
+    const response = await request(app).get('/api/unknown');
+
+    expect(response.status).toBe(404);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('NOT_FOUND');
+  });
+});
