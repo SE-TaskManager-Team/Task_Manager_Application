@@ -19,6 +19,27 @@ describe('Project API', () => {
   });
 
 
+  test('rejects project creation without authentication', async () => {
+    const response = await request(app)
+      .post('/api/projects')
+      .send({});
+
+    expect(response.status).toBe(401);
+    expect(response.body.success).toBe(false);
+    expect(response.body.error.code).toBe('AUTHENTICATION_REQUIRED');
+  });
+
+  test('rejects project update without authentication', async () => {
+    const response = await request(app)
+      .put('/api/projects/not-a-valid-id')
+      .send({ name: 'Updated Project' });
+
+    expect(response.status).toBe(401);
+    expect(response.body.success).toBe(false);
+  });
+
+
+
   test.each([
     ['POST', '/api/projects'],
     ['PUT', '/api/projects/not-a-valid-id'],
