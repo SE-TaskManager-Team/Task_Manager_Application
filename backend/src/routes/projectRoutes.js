@@ -480,3 +480,4 @@ router.delete(
 );
 
 module.exports = router;
+module.exports.isValidDeadline = isValidDeadline;
