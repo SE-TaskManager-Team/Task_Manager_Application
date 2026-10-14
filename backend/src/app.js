@@ -9,6 +9,7 @@ const userRoutes = require('./routes/userRoutes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 
+const taskRoutes = require('./routes/taskRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 
 
@@ -25,7 +26,9 @@ app.use('/api', healthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
+app.use('/api/projects/:projectId/tasks', taskRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/tasks', taskRoutes);
 
 
 
