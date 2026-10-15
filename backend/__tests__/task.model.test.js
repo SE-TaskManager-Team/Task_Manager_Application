@@ -7,74 +7,78 @@ describe('Task Model Test', () => {
     title: 'Valid Task',
     description: 'This is a valid task',
     priority: 'medium',
-    deadline: new Date(Date.now() + 1000 * 60 * 60 * 24), // 1 day in the future
+    deadline: new Date(Date.now() + 1000 * 60 * 60 * 24),
     projectId: new mongoose.Types.ObjectId(),
     createdById: new mongoose.Types.ObjectId(),
   });
 
-  test('A valid task has the expected fields and default status todo', () => {
+  test('A valid task has the expected fields and default status todo', async () => {
     const taskData = createValidTaskData();
     const task = new Task(taskData);
-    const err = task.validateSync();
+    await expect(task.validate()).resolves.toBeUndefined();
 
-    expect(err).toBeUndefined();
     expect(task.title).toBe(taskData.title);
     expect(task.description).toBe(taskData.description);
     expect(task.priority).toBe(taskData.priority);
     expect(task.deadline).toEqual(taskData.deadline);
     expect(task.projectId).toEqual(taskData.projectId);
     expect(task.createdById).toEqual(taskData.createdById);
-    expect(task.status).toBe('todo'); // Default status
+    expect(task.status).toBe('todo');
   });
 
-  test('Missing required fields fail validation', () => {
+  test('Missing required fields fail validation', async () => {
     const task = new Task({});
-    const err = task.validateSync();
 
-    expect(err).toBeDefined();
-    expect(err.errors.title).toBeDefined();
-    expect(err.errors.priority).toBeDefined();
-    expect(err.errors.deadline).toBeDefined();
-    expect(err.errors.projectId).toBeDefined();
-    expect(err.errors.createdById).toBeDefined();
+    await expect(task.validate()).rejects.toMatchObject({
+      errors: {
+        title: expect.anything(),
+        priority: expect.anything(),
+        deadline: expect.anything(),
+        projectId: expect.anything(),
+        createdById: expect.anything(),
+      },
+    });
   });
 
-  test('Invalid priority values fail validation', () => {
+  test('Invalid priority values fail validation', async () => {
     const taskData = createValidTaskData();
-    taskData.priority = 'super-high'; // Invalid
+    taskData.priority = 'super-high';
 
     const task = new Task(taskData);
-    const err = task.validateSync();
 
-    expect(err).toBeDefined();
-    expect(err.errors.priority).toBeDefined();
+    await expect(task.validate()).rejects.toMatchObject({
+      errors: {
+        priority: expect.anything(),
+      },
+    });
   });
 
-  test('Invalid status values fail validation', () => {
+  test('Invalid status values fail validation', async () => {
     const taskData = createValidTaskData();
-    taskData.status = 'done'; // Invalid
+    taskData.status = 'done';
 
     const task = new Task(taskData);
-    const err = task.validateSync();
 
-    expect(err).toBeDefined();
-    expect(err.errors.status).toBeDefined();
+    await expect(task.validate()).rejects.toMatchObject({
+      errors: {
+        status: expect.anything(),
+      },
+    });
   });
 
-  test('assigneeId can be null', () => {
+  test('assigneeId can be null', async () => {
     const taskData = createValidTaskData();
     taskData.assigneeId = null;
 
     const task = new Task(taskData);
-    const err = task.validateSync();
+    await expect(task.validate()).resolves.toBeUndefined();
 
-    expect(err).toBeUndefined();
     expect(task.assigneeId).toBeNull();
   });
 
   test('The isOverdue virtual is true when the deadline is in the past and the task is not completed', () => {
     const taskData = createValidTaskData();
-    taskData.deadline = new Date(Date.now() - 1000 * 60 * 60 * 24); // 1 day in the past
+    taskData.deadline = new Date(Date.now() - 1000 * 60 * 60 * 24);
     taskData.status = 'inProgress';
 
     const task = new Task(taskData);
@@ -83,7 +87,7 @@ describe('Task Model Test', () => {
 
   test('The isOverdue virtual is false when the status is completed, even if the deadline is in the past', () => {
     const taskData = createValidTaskData();
-    taskData.deadline = new Date(Date.now() - 1000 * 60 * 60 * 24); // 1 day in the past
+    taskData.deadline = new Date(Date.now() - 1000 * 60 * 60 * 24);
     taskData.status = 'completed';
 
     const task = new Task(taskData);
