@@ -57,4 +57,30 @@ describe('Health API integration tests', () => {
     expect(response.status).toBe(400);
     expect(response.body.success).toBe(false);
   });
+
+  test('liveness succeeds when the database is disconnected', async () => {
+    const response = await request(app).get('/api/health/live');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('alive');
+  });
+
+  test('readiness returns 503 when the database is disconnected', async () => {
+    const response = await request(app).get('/api/health/ready');
+
+    expect(response.status).toBe(503);
+    expect(response.body.success).toBe(false);
+    expect(response.body.data.status).toBe('not_ready');
+  });
+
+  test('readiness returns 200 when the database is connected', async () => {
+    mongoose.connection.readyState = 1;
+
+    const response = await request(app).get('/api/health/ready');
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.status).toBe('ready');
+  });
 });
