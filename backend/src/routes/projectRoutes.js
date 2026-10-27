@@ -129,6 +129,58 @@ router.get('/', async (req, res, next) => {
 });
 
 // View a project only if the user belongs to it or is its leader/admin.
+router.get('/:id/progress', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!/^[a-f\d]{24}$/i.test(id)) {
+      return fail(res, 400, 'INVALID_PROJECT_ID', 'Invalid project ID.');
+    }
+
+    const project = await Project.findById(id).select(
+      '_id name teamLeaderId memberIds'
+    );
+
+    if (!project) {
+      return fail(res, 404, 'PROJECT_NOT_FOUND', 'Project not found.');
+    }
+
+    const isAdmin = req.user.role === 'admin';
+    const isLeader = String(project.teamLeaderId) === String(req.user._id);
+    const isMember = Array.isArray(project.memberIds) &&
+      project.memberIds.some(memberId => String(memberId) === String(req.user._id));
+
+    if (!isAdmin && !isLeader && !isMember) {
+      return fail(
+        res,
+        403,
+        'PROJECT_ACCESS_DENIED',
+        'You do not have access to this project.'
+      );
+    }
+
+    const Task = require('../models/Task');
+
+    const [totalTasks, completedTasks] = await Promise.all([
+      Task.countDocuments({ projectId: project._id }),
+      Task.countDocuments({ projectId: project._id, status: 'completed' })
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        projectId: project._id,
+        totalTasks,
+        completedTasks,
+        progress: totalTasks
+          ? Math.round(completedTasks * 100 / totalTasks)
+          : 0
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
 router.get('/:id', async (req, res, next) => {
   try {
     if (!validId(req.params.id)) {
