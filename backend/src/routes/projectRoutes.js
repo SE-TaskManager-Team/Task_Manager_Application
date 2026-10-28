@@ -1,4 +1,4 @@
-
+﻿
 const express = require('express');
 const Project = require('../models/Project');
 const User = require('../models/User');
@@ -161,10 +161,13 @@ router.get('/:id/progress', async (req, res, next) => {
 
     const Task = require('../models/Task');
 
-    const [totalTasks, completedTasks] = await Promise.all([
-      Task.countDocuments({ projectId: project._id }),
-      Task.countDocuments({ projectId: project._id, status: 'completed' })
-    ]);
+    const [totalTasks, completedTasks, inProgressTasks, pendingTasks] =
+      await Promise.all([
+        Task.countDocuments({ projectId: project._id }),
+        Task.countDocuments({ projectId: project._id, status: 'completed' }),
+        Task.countDocuments({ projectId: project._id, status: 'inProgress' }),
+        Task.countDocuments({ projectId: project._id, status: 'todo' })
+      ]);
 
     return res.json({
       success: true,
@@ -172,6 +175,8 @@ router.get('/:id/progress', async (req, res, next) => {
         projectId: project._id,
         totalTasks,
         completedTasks,
+        inProgressTasks,
+        pendingTasks,
         progress: totalTasks
           ? Math.round(completedTasks * 100 / totalTasks)
           : 0
@@ -539,3 +544,4 @@ router.delete(
 
 module.exports = router;
 module.exports.isValidDeadline = isValidDeadline;
+
