@@ -781,6 +781,35 @@ describe('Task Management Routes (/api/projects/:projectId/tasks)', () => {
       });
     });
 
+    test('sorts by status asc and desc', async () => {
+      jest.spyOn(Task, 'countDocuments').mockResolvedValue(0);
+
+      const mockFind = {
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue([])
+      };
+      jest.spyOn(Task, 'find').mockReturnValue(mockFind);
+
+      await request(app)
+        .get(`/api/projects/${projectId}/tasks?sortBy=status&order=asc`)
+        .set('Authorization', tokenFor(leaderUser));
+
+      expect(mockFind.sort).toHaveBeenCalledWith({
+        status: 1,
+        createdAt: -1
+      });
+
+      await request(app)
+        .get(`/api/projects/${projectId}/tasks?sortBy=status&order=desc`)
+        .set('Authorization', tokenFor(leaderUser));
+
+      expect(mockFind.sort).toHaveBeenCalledWith({
+        status: -1,
+        createdAt: -1
+      });
+    });
+
     test('sorts by priority respecting contract ordering (low, medium, high)', async () => {
       jest.spyOn(Task, 'countDocuments').mockResolvedValue(3);
 
