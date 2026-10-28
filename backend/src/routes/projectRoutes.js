@@ -1,7 +1,11 @@
-﻿
+
 const express = require('express');
+const mongoose = require('mongoose');
 const Project = require('../models/Project');
 const User = require('../models/User');
+const Task = require('../models/Task');
+const Comment = require('../models/Comment');
+const Notification = require('../models/Notification');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -158,8 +162,6 @@ router.get('/:id/progress', async (req, res, next) => {
         'You do not have access to this project.'
       );
     }
-
-    const Task = require('../models/Task');
 
     const [totalTasks, completedTasks, inProgressTasks, pendingTasks] =
       await Promise.all([
@@ -331,7 +333,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Delete a project and its dependent task data.
+// Delete a project and cascade-delete associated tasks, comments, and notifications.
 router.delete('/:id', async (req, res, next) => {
   try {
     if (!validId(req.params.id)) {
@@ -341,7 +343,12 @@ router.delete('/:id', async (req, res, next) => {
     const project = await Project.findById(req.params.id);
 
     if (!project) {
-      return fail(res, 404, 'PROJECT_NOT_FOUND', 'Project was not found.');
+      return fail(
+        res,
+        404,
+        'PROJECT_NOT_FOUND',
+        'Project was not found.'
+      );
     }
 
     if (
@@ -356,13 +363,49 @@ router.delete('/:id', async (req, res, next) => {
       );
     }
 
-    const tasks = await Task.find({ projectId: project._id }).select('_id');
-    const taskIds = tasks.map(task => task._id);
+    let session = null;
+    if (
+      mongoose.connection &&
+      mongoose.connection.readyState === 1 &&
+      typeof mongoose.connection.startSession === 'function' &&
+      mongoose.connection.client?.topology?.description?.type &&
+      mongoose.connection.client.topology.description.type !== 'Single'
+    ) {
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      } catch (err) {
+        session = null;
+      }
+    }
 
-    await Comment.deleteMany({ taskId: { $in: taskIds } });
-    await Notification.deleteMany({ taskId: { $in: taskIds } });
-    await Task.deleteMany({ projectId: project._id });
-    await project.deleteOne();
+    const sessionOpts = session ? { session } : {};
+
+    try {
+      const tasks = await Task.find({ projectId: project._id }, '_id', sessionOpts);
+      const taskIds = tasks.map((t) => t._id);
+
+      if (taskIds.length > 0) {
+        await Promise.all([
+          Comment.deleteMany({ taskId: { $in: taskIds } }, sessionOpts),
+          Notification.deleteMany({ taskId: { $in: taskIds } }, sessionOpts)
+        ]);
+      }
+
+      await Task.deleteMany({ projectId: project._id }, sessionOpts);
+      await project.deleteOne(sessionOpts);
+
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+      }
+    } catch (cascadeError) {
+      if (session) {
+        await session.abortTransaction().catch(() => {});
+        session.endSession().catch(() => {});
+      }
+      throw cascadeError;
+    }
 
     return res.json({
       success: true,

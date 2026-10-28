@@ -1,0 +1,352 @@
+.auth-page {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 2rem;
+    background: #f1f5f9;
+    box-sizing: border-box;
+}
+
+.auth-card {
+    width: min(100%, 430px);
+    padding: 2rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+}
+
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-bottom: 1.75rem;
+}
+
+.auth-brand h1 {
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.auth-brand p {
+    margin: 0.3rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.auth-brand-mark {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: #0f172a;
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.auth-form {
+    display: grid;
+    gap: 1rem;
+}
+
+.auth-form label {
+    display: grid;
+    gap: 0.4rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.auth-form input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.7rem 0.8rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    font: inherit;
+}
+
+.auth-form input:focus,
+.project-toolbar select:focus {
+    outline: 2px solid #94a3b8;
+    outline-offset: 1px;
+}
+
+.auth-submit,
+.logout-button {
+    border: 0;
+    border-radius: 7px;
+    padding: 0.7rem 1rem;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-submit {
+    background: #0f172a;
+    color: #ffffff;
+}
+
+.auth-submit:disabled {
+    opacity: 0.6;
+    cursor: wait;
+}
+
+.auth-error,
+.app-alert-error,
+.app-state-error {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
+.auth-error {
+    padding: 0.75rem;
+    border-radius: 7px;
+    font-size: 0.9rem;
+}
+
+.auth-loading,
+.app-state {
+    padding: 2rem;
+    text-align: center;
+    color: #475569;
+}
+
+.app-header {
+    min-height: 64px;
+    box-sizing: border-box;
+    padding: 0.75rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    background: #0f172a;
+    color: #f8fafc;
+}
+
+.app-header-subtitle {
+    margin-left: 0.75rem;
+    color: #94a3b8;
+    font-size: 0.9rem;
+}
+
+.app-header-user {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.app-user-details {
+    display: grid;
+    gap: 0.1rem;
+    text-align: right;
+}
+
+.app-user-details span {
+    color: #94a3b8;
+    font-size: 0.78rem;
+    text-transform: capitalize;
+}
+
+.logout-button {
+    background: #334155;
+    color: #ffffff;
+}
+
+.logout-button:hover {
+    background: #475569;
+}
+
+.project-toolbar {
+    max-width: 1200px;
+    margin: 1.25rem auto 0;
+    padding: 0 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.project-toolbar label {
+    font-weight: 600;
+    color: #334155;
+}
+
+.project-toolbar select {
+    min-width: 260px;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 7px;
+    background: #ffffff;
+    font: inherit;
+}
+
+.app-alert {
+    max-width: 1200px;
+    margin: 1rem auto 0;
+    padding: 0.75rem 1rem;
+    border-radius: 7px;
+}
+
+.app-state {
+    max-width: 700px;
+    margin: 3rem auto;
+}
+
+.app-state h2 {
+    margin-bottom: 0.5rem;
+}
+
+.app-state-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    max-width: 700px;
+    margin: 2rem auto;
+    padding: 1rem;
+    border-radius: 7px;
+}
+
+.auth-switch {
+    margin: 1.25rem 0 0;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.auth-link {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #2563eb;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.auth-link:hover {
+    text-decoration: underline;
+}
+
+.auth-success {
+    padding: 0.75rem;
+    border: 1px solid #bbf7d0;
+    border-radius: 7px;
+    color: #166534;
+    background: #f0fdf4;
+    font-size: 0.9rem;
+}
+
+.admin-users {
+    max-width: 1200px;
+    margin: 1.5rem auto;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    background: #fff;
+    box-sizing: border-box;
+}
+.admin-users-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.admin-users-heading h2 {
+    margin: 0;
+    font-size: 1.15rem;
+}
+.admin-users-heading p {
+    margin: 0.35rem 0 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+.admin-users-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    margin-top: 1rem;
+}
+.admin-users-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 0.9rem;
+}
+.admin-users-table th,
+.admin-users-table td {
+    padding: 0.75rem 0.6rem;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: middle;
+}
+.admin-users-table th {
+    color: #475569;
+    font-weight: 700;
+    background: #f8fafc;
+}
+.admin-users-table select {
+    max-width: 100%;
+    padding: 0.4rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    background: white;
+}
+.admin-users-table select:disabled {
+    color: #64748b;
+    background: #f1f5f9;
+}
+.admin-deactivate-button {
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    color: #991b1b;
+    background: #fff;
+    cursor: pointer;
+}
+.admin-deactivate-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.admin-status-active,
+.admin-status-inactive {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.admin-status-active {
+    color: #166534;
+}
+.admin-status-inactive {
+    color: #991b1b;
+}
+.admin-message {
+    padding: 0.65rem 0.8rem;
+    border-radius: 6px;
+    margin: 0.8rem 0;
+    font-size: 0.9rem;
+}
+.admin-message-error {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+.admin-message-success {
+    color: #166534;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+}
+.admin-users-note {
+    margin: 1rem 0 0;
+    color: #64748b;
+    font-size: 0.8rem;
+}
+@media (max-width: 640px) {
+    .admin-users {
+        margin: 1rem;
+        padding: 1rem;
+    }
+    .admin-users-table {
+        min-width: 650px;
+    }
+}
