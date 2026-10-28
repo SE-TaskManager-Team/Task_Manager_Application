@@ -8,6 +8,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
+const dashboardRoutes = require('./routes/dashboardRoutes');
+const searchRoutes = require('./routes/searchRoutes');
 
 const { loginLimiter } = require('./middleware/rateLimits');
 const {
@@ -57,6 +59,8 @@ app.use('/api/users', userRoutes);
 // Project and task routes
 app.use('/api/projects/:projectId/tasks', taskRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/search', searchRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // 404 handler
