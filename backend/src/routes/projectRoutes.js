@@ -1,7 +1,11 @@
 
 const express = require('express');
+const mongoose = require('mongoose');
 const Project = require('../models/Project');
 const User = require('../models/User');
+const Task = require('../models/Task');
+const Comment = require('../models/Comment');
+const Notification = require('../models/Notification');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -326,7 +330,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Related-data cleanup can be added when dependent models are integrated.
+// Delete a project and cascade-delete associated tasks, comments, and notifications.
 router.delete('/:id', async (req, res, next) => {
   try {
     if (!validId(req.params.id)) {
@@ -356,7 +360,49 @@ router.delete('/:id', async (req, res, next) => {
       );
     }
 
-    await project.deleteOne();
+    let session = null;
+    if (
+      mongoose.connection &&
+      mongoose.connection.readyState === 1 &&
+      typeof mongoose.connection.startSession === 'function' &&
+      mongoose.connection.client?.topology?.description?.type &&
+      mongoose.connection.client.topology.description.type !== 'Single'
+    ) {
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      } catch (err) {
+        session = null;
+      }
+    }
+
+    const sessionOpts = session ? { session } : {};
+
+    try {
+      const tasks = await Task.find({ projectId: project._id }, '_id', sessionOpts);
+      const taskIds = tasks.map((t) => t._id);
+
+      if (taskIds.length > 0) {
+        await Promise.all([
+          Comment.deleteMany({ taskId: { $in: taskIds } }, sessionOpts),
+          Notification.deleteMany({ taskId: { $in: taskIds } }, sessionOpts)
+        ]);
+      }
+
+      await Task.deleteMany({ projectId: project._id }, sessionOpts);
+      await project.deleteOne(sessionOpts);
+
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+      }
+    } catch (cascadeError) {
+      if (session) {
+        await session.abortTransaction().catch(() => {});
+        session.endSession().catch(() => {});
+      }
+      throw cascadeError;
+    }
 
     return res.json({
       success: true,
