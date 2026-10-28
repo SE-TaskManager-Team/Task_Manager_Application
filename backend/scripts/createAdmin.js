@@ -11,7 +11,7 @@ const { hashPassword } = require("../src/utils/security");
             "Set MONGODB_URI, ADMIN_NAME, ADMIN_EMAIL, and ADMIN_PASSWORD in the environment.",
         );
     }
-    if (ADMIN_PASSWORD.length < 5)
+    if (ADMIN_PASSWORD.length < 12)
         throw new Error(
             "ADMIN_PASSWORD must be at least 12 characters for bootstrap.",
         );
