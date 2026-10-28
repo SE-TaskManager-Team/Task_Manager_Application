@@ -1,5 +1,6 @@
 const express = require('express');
 const User = require('../models/User');
+const Task = require('../models/Task');
 const { authenticate, authorize } = require('../middleware/auth');
 const { hashPassword } = require('../utils/security');
 const router = express.Router();
@@ -43,6 +44,7 @@ router.put('/:id', async (req, res, next) => {
     if (Object.keys(body).some((key) => !allowed.includes(key))) return fail(res, 403, 'FORBIDDEN', 'One or more fields cannot be changed by this user.');
     const user = await User.findById(req.params.id).select('+passwordHash');
     if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'User was not found.');
+    const wasActive = user.isActive;
     if (body.name !== undefined) {
       if (typeof body.name !== 'string' || body.name.trim().length < 2 || body.name.trim().length > 80) return fail(res, 400, 'VALIDATION_ERROR', 'Name must be between 2 and 80 characters.');
       user.name = body.name.trim();
@@ -67,6 +69,12 @@ router.put('/:id', async (req, res, next) => {
       }
       user.isActive = body.isActive;
     }
+    if (wasActive && user.isActive === false) {
+      await Task.updateMany(
+        { assigneeId: user._id },
+        { $set: { assigneeId: null } }
+      );
+    }
     await user.save();
     return res.json({ success: true, data: { user: user.toJSON() } });
   } catch (error) { return next(error); }
@@ -79,8 +87,11 @@ router.patch('/:id/deactivate', authorize('admin'), async (req, res, next) => {
     if (!user) return fail(res, 404, 'USER_NOT_FOUND', 'User was not found.');
     if (user.isActive && user.role === 'admin' && await User.countDocuments({ role: 'admin', isActive: true }) <= 1) return fail(res, 400, 'LAST_ACTIVE_ADMIN', 'The last active admin cannot be deactivated.');
     user.isActive = false;
+    await Task.updateMany(
+      { assigneeId: user._id },
+      { $set: { assigneeId: null } }
+    );
     await user.save();
-    // Task unassignment is wired when the Task model is introduced; never hard-delete the user.
     return res.json({ success: true, data: { user: user.toJSON() } });
   } catch (error) { return next(error); }
 });

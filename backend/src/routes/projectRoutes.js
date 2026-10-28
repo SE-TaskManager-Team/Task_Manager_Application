@@ -326,7 +326,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Related-data cleanup can be added when dependent models are integrated.
+// Delete a project and its dependent task data.
 router.delete('/:id', async (req, res, next) => {
   try {
     if (!validId(req.params.id)) {
@@ -336,12 +336,7 @@ router.delete('/:id', async (req, res, next) => {
     const project = await Project.findById(req.params.id);
 
     if (!project) {
-      return fail(
-        res,
-        404,
-        'PROJECT_NOT_FOUND',
-        'Project was not found.'
-      );
+      return fail(res, 404, 'PROJECT_NOT_FOUND', 'Project was not found.');
     }
 
     if (
@@ -356,6 +351,12 @@ router.delete('/:id', async (req, res, next) => {
       );
     }
 
+    const tasks = await Task.find({ projectId: project._id }).select('_id');
+    const taskIds = tasks.map(task => task._id);
+
+    await Comment.deleteMany({ taskId: { $in: taskIds } });
+    await Notification.deleteMany({ taskId: { $in: taskIds } });
+    await Task.deleteMany({ projectId: project._id });
     await project.deleteOne();
 
     return res.json({
@@ -517,6 +518,11 @@ router.delete(
           'This user is not a member of the project.'
         );
       }
+
+      await Task.updateMany(
+        { projectId: project._id, assigneeId: userId },
+        { $set: { assigneeId: null } }
+      );
 
       project.memberIds.splice(memberIndex, 1);
       await project.save();
