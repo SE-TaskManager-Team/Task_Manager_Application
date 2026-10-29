@@ -47,5 +47,21 @@ export const userService = {
       headers: authHeaders(token)
     });
     return parseResponse(response);
+  },
+
+  async createUser(token, userData) {
+    let actualToken = token;
+    let actualData = userData;
+    if (typeof token === 'object' && typeof userData === 'string') {
+      actualToken = userData;
+      actualData = token;
+    }
+
+    const response = await fetch(`${API_BASE}/users`, {
+      method: 'POST',
+      headers: authHeaders(actualToken),
+      body: JSON.stringify(actualData)
+    });
+    return parseResponse(response);
   }
 };

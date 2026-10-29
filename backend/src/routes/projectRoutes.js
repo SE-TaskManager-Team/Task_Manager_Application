@@ -1,7 +1,11 @@
 
 const express = require('express');
+const mongoose = require('mongoose');
 const Project = require('../models/Project');
 const User = require('../models/User');
+const Task = require('../models/Task');
+const Comment = require('../models/Comment');
+const Notification = require('../models/Notification');
 const { authenticate, authorize } = require('../middleware/auth');
 
 const router = express.Router();
@@ -159,12 +163,13 @@ router.get('/:id/progress', async (req, res, next) => {
       );
     }
 
-    const Task = require('../models/Task');
-
-    const [totalTasks, completedTasks] = await Promise.all([
-      Task.countDocuments({ projectId: project._id }),
-      Task.countDocuments({ projectId: project._id, status: 'completed' })
-    ]);
+    const [totalTasks, completedTasks, inProgressTasks, pendingTasks] =
+      await Promise.all([
+        Task.countDocuments({ projectId: project._id }),
+        Task.countDocuments({ projectId: project._id, status: 'completed' }),
+        Task.countDocuments({ projectId: project._id, status: 'inProgress' }),
+        Task.countDocuments({ projectId: project._id, status: 'todo' })
+      ]);
 
     return res.json({
       success: true,
@@ -172,6 +177,8 @@ router.get('/:id/progress', async (req, res, next) => {
         projectId: project._id,
         totalTasks,
         completedTasks,
+        inProgressTasks,
+        pendingTasks,
         progress: totalTasks
           ? Math.round(completedTasks * 100 / totalTasks)
           : 0
@@ -326,7 +333,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// Related-data cleanup can be added when dependent models are integrated.
+// Delete a project and cascade-delete associated tasks, comments, and notifications.
 router.delete('/:id', async (req, res, next) => {
   try {
     if (!validId(req.params.id)) {
@@ -356,7 +363,49 @@ router.delete('/:id', async (req, res, next) => {
       );
     }
 
-    await project.deleteOne();
+    let session = null;
+    if (
+      mongoose.connection &&
+      mongoose.connection.readyState === 1 &&
+      typeof mongoose.connection.startSession === 'function' &&
+      mongoose.connection.client?.topology?.description?.type &&
+      mongoose.connection.client.topology.description.type !== 'Single'
+    ) {
+      try {
+        session = await mongoose.startSession();
+        session.startTransaction();
+      } catch (err) {
+        session = null;
+      }
+    }
+
+    const sessionOpts = session ? { session } : {};
+
+    try {
+      const tasks = await Task.find({ projectId: project._id }, '_id', sessionOpts);
+      const taskIds = tasks.map((t) => t._id);
+
+      if (taskIds.length > 0) {
+        await Promise.all([
+          Comment.deleteMany({ taskId: { $in: taskIds } }, sessionOpts),
+          Notification.deleteMany({ taskId: { $in: taskIds } }, sessionOpts)
+        ]);
+      }
+
+      await Task.deleteMany({ projectId: project._id }, sessionOpts);
+      await project.deleteOne(sessionOpts);
+
+      if (session) {
+        await session.commitTransaction();
+        session.endSession();
+      }
+    } catch (cascadeError) {
+      if (session) {
+        await session.abortTransaction().catch(() => {});
+        session.endSession().catch(() => {});
+      }
+      throw cascadeError;
+    }
 
     return res.json({
       success: true,
@@ -518,6 +567,11 @@ router.delete(
         );
       }
 
+      await Task.updateMany(
+        { projectId: project._id, assigneeId: userId },
+        { $set: { assigneeId: null } }
+      );
+
       project.memberIds.splice(memberIndex, 1);
       await project.save();
 
@@ -533,3 +587,4 @@ router.delete(
 
 module.exports = router;
 module.exports.isValidDeadline = isValidDeadline;
+

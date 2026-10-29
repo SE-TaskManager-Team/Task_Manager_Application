@@ -10,6 +10,7 @@ const projectRoutes = require('./routes/projectRoutes');
 const taskRoutes = require('./routes/taskRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 const searchRoutes = require('./routes/searchRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
 
 const { loginLimiter } = require('./middleware/rateLimits');
 const {
@@ -56,11 +57,12 @@ app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 
-// Project and task routes
+// Project, task, dashboard, search, and notification routes
 app.use('/api/projects/:projectId/tasks', taskRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks', taskRoutes);
 
 // 404 handler

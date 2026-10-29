@@ -49,4 +49,52 @@ export const projectService = {
 
         return handleResponse(response);
     },
+
+    async createProject(projectData, token) {
+        let actualData = projectData;
+        let actualToken = token;
+        if (typeof projectData === "string" && typeof token === "object") {
+            actualToken = projectData;
+            actualData = token;
+        }
+
+        const response = await fetch(`${API_BASE}/projects`, {
+            method: "POST",
+            headers: headers(actualToken),
+            body: JSON.stringify(actualData),
+        });
+
+        return handleResponse(response);
+    },
+
+    async addMember(projectId, userId, token) {
+        const response = await fetch(`${API_BASE}/projects/${projectId}/members`, {
+            method: "POST",
+            headers: headers(token),
+            body: JSON.stringify({ userId }),
+        });
+
+        return handleResponse(response);
+    },
+
+    async removeMember(projectId, userId, token) {
+        const response = await fetch(
+            `${API_BASE}/projects/${projectId}/members/${userId}`,
+            {
+                method: "DELETE",
+                headers: headers(token),
+            },
+        );
+
+        return handleResponse(response);
+    },
+
+    async getProjectProgress(projectId, token) {
+        const response = await fetch(`${API_BASE}/projects/${projectId}/progress`, {
+            method: "GET",
+            headers: headers(token),
+        });
+
+        return handleResponse(response);
+    },
 };

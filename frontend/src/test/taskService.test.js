@@ -200,4 +200,78 @@ describe('taskService API Client', () => {
       status: 400
     });
   });
+
+  it('getTaskComments fetches /api/tasks/:id/comments with Authorization header', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        data: {
+          comments: [{ _id: 'c-1', text: 'Hello', authorId: { name: 'Alice' } }]
+        }
+      })
+    });
+
+    const result = await taskService.getTaskComments('task-101', 'token-xyz');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/tasks/task-101/comments',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-xyz'
+        })
+      })
+    );
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].text).toBe('Hello');
+  });
+
+  it('addComment sends POST to /api/tasks/:id/comments with payload and Authorization header', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        success: true,
+        data: {
+          comment: { _id: 'c-2', text: 'New Comment' }
+        }
+      })
+    });
+
+    const result = await taskService.addComment('task-101', { text: 'New Comment' }, 'token-xyz');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/tasks/task-101/comments',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-xyz'
+        }),
+        body: JSON.stringify({ text: 'New Comment' })
+      })
+    );
+    expect(result.comment.text).toBe('New Comment');
+  });
+
+  it('addComment supports passing a plain string for text', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 201,
+      json: async () => ({
+        success: true,
+        data: {
+          comment: { _id: 'c-3', text: 'String comment' }
+        }
+      })
+    });
+
+    const result = await taskService.addComment('task-101', 'String comment', 'token-xyz');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/tasks/task-101/comments',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'String comment' })
+      })
+    );
+    expect(result.comment.text).toBe('String comment');
+  });
 });
