@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { taskService } from '../../services/taskService';
+import { projectService } from '../../services/projectService';
 import { TaskList } from './TaskList';
 import { TaskFilters } from './TaskFilters';
 import { Pagination } from './Pagination';
@@ -10,13 +11,16 @@ import { TaskStatusModal } from './TaskStatusModal';
 import { TaskDeleteModal } from './TaskDeleteModal';
 import { TaskDetailsModal } from './TaskDetailsModal';
 import { MyTasksView } from './MyTasksView';
+import { ProjectMembersModal } from '../projects/ProjectMembersModal';
 
 export function TaskManagement({
   projectId,
   project,
   currentUser,
   token,
-  memberNames = {}
+  memberNames = {},
+  onProjectUpdated,
+  allUsers = []
 }) {
   const [activeTab, setActiveTab] = useState('project'); // 'project' | 'my'
   const [tasks, setTasks] = useState([]);
@@ -27,6 +31,7 @@ export function TaskManagement({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [feedback, setFeedback] = useState(null);
+  const [projectProgress, setProjectProgress] = useState(null);
 
   // Filters state
   const [filters, setFilters] = useState({
@@ -41,6 +46,7 @@ export function TaskManagement({
 
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isMembersOpen, setIsMembersOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [assigningTask, setAssigningTask] = useState(null);
   const [statusTask, setStatusTask] = useState(null);
@@ -63,6 +69,21 @@ export function TaskManagement({
   const memberIds = useMemo(() => {
     return Array.isArray(project?.memberIds) ? project.memberIds : [];
   }, [project]);
+
+  // Load overall project progress from API (SRS TM-F-015)
+  const fetchProgress = useCallback(async () => {
+    if (!projectId || !token) return;
+    try {
+      const data = await projectService.getProjectProgress(projectId, token);
+      setProjectProgress(data);
+    } catch (_err) {
+      // Graceful fallback to tasks-based calculation
+    }
+  }, [projectId, token]);
+
+  useEffect(() => {
+    setProjectProgress(null);
+  }, [projectId]);
 
   // Load project tasks from API
   const fetchTasks = useCallback(async () => {
@@ -93,8 +114,9 @@ export function TaskManagement({
   useEffect(() => {
     if (activeTab === 'project') {
       fetchTasks();
+      fetchProgress();
     }
-  }, [fetchTasks, activeTab]);
+  }, [fetchTasks, fetchProgress, activeTab]);
 
   // Task summary metrics
   const summary = useMemo(() => {
@@ -108,7 +130,35 @@ export function TaskManagement({
     return counts;
   }, [tasks]);
 
-  // Actions
+  // Project progress indicator (SRS TM-F-015)
+  const progressInfo = useMemo(() => {
+    if (projectProgress && typeof projectProgress.progress === 'number') {
+      const total = projectProgress.totalTasks ?? 0;
+      const completed = projectProgress.completedTasks ?? 0;
+      const pct = total > 0 ? Math.round((completed * 100) / total) : 0;
+      return {
+        progress: typeof projectProgress.progress === 'number' ? projectProgress.progress : pct,
+        totalTasks: total,
+        completedTasks: completed
+      };
+    }
+
+    // Fallback: calculate from tasks belonging to the selected project
+    const projectTasks = tasks.filter(
+      (t) => !t.projectId || String(t.projectId) === String(projectId)
+    );
+    const total = projectTasks.length;
+    const completed = projectTasks.filter((t) => t.status === 'completed').length;
+    const pct = total > 0 ? Math.round((completed * 100) / total) : 0;
+
+    return {
+      progress: pct,
+      totalTasks: total,
+      completedTasks: completed
+    };
+  }, [projectProgress, tasks, projectId]);
+
+  // Actions
   const handleCreateSubmit = async (taskData) => {
     setIsSubmitting(true);
     setModalError(null);
@@ -118,6 +168,7 @@ export function TaskManagement({
       setIsCreateOpen(false);
       setPage(1);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setModalError(err.message || 'Failed to create task.');
     } finally {
@@ -134,6 +185,7 @@ export function TaskManagement({
       setFeedback('Task details updated successfully.');
       setEditingTask(null);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setModalError(err.message || 'Failed to update task.');
     } finally {
@@ -151,6 +203,7 @@ export function TaskManagement({
       setFeedback(`Task successfully ${actionText}.`);
       setAssigningTask(null);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setModalError(err.message || 'Failed to update task assignment.');
     } finally {
@@ -167,6 +220,7 @@ export function TaskManagement({
       setFeedback(`Task status updated to ${newStatus}.`);
       setStatusTask(null);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setModalError(err.message || 'Failed to update status.');
     } finally {
@@ -180,6 +234,7 @@ export function TaskManagement({
       await taskService.updateTaskStatus(taskId, nextStatus, token);
       setFeedback(`Task status updated to ${nextStatus}.`);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setError(err.message || 'Failed to update status.');
     }
@@ -194,6 +249,7 @@ export function TaskManagement({
       setFeedback('Task deleted successfully.');
       setDeletingTask(null);
       fetchTasks();
+      fetchProgress();
     } catch (err) {
       setModalError(err.message || 'Failed to delete task.');
     } finally {
@@ -249,23 +305,39 @@ export function TaskManagement({
           </div>
 
           {activeTab === 'project' && isLeader && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => {
-                setModalError(null);
-                setIsCreateOpen(true);
-              }}
-              data-testid="btn-create-task"
-            >
-              ＋ New Task
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setModalError(null);
+                  setIsMembersOpen(true);
+                }}
+                data-testid="btn-manage-members"
+              >
+                👥 Members ({memberIds.length})
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  setModalError(null);
+                  setIsCreateOpen(true);
+                }}
+                data-testid="btn-create-task"
+              >
+                ＋ New Task
+              </button>
+            </>
           )}
 
           <button
             type="button"
             className="btn btn-secondary"
-            onClick={fetchTasks}
+            onClick={() => {
+              fetchTasks();
+              fetchProgress();
+            }}
             disabled={isLoading}
             title="Refresh tasks"
             data-testid="btn-refresh-tasks"
@@ -295,8 +367,42 @@ export function TaskManagement({
         <MyTasksView token={token} currentUser={currentUser} />
       ) : (
         <>
+          {/* Overall Project Progress (SRS TM-F-015) */}
+          <div className="project-progress-container" data-testid="project-progress-container">
+            <div className="project-progress-header">
+              <div className="project-progress-title-wrap">
+                <span className="project-progress-title">Project Progress</span>
+                <span className="project-progress-details text-muted" data-testid="project-progress-details">
+                  {progressInfo.completedTasks} of {progressInfo.totalTasks} tasks completed
+                </span>
+              </div>
+              <span className="project-progress-percentage" data-testid="project-progress-percentage">
+                {progressInfo.progress}%
+              </span>
+            </div>
+            <div
+              className="progress-bar-track"
+              role="progressbar"
+              aria-valuenow={progressInfo.progress}
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-label="Project overall progress"
+              data-testid="project-progress-bar"
+            >
+              <div
+                className="progress-bar-fill"
+                style={{ width: `${progressInfo.progress}%` }}
+                data-testid="project-progress-fill"
+              />
+            </div>
+          </div>
+
           {/* Summary Metric Cards */}
           <div className="summary-cards-grid" data-testid="task-summary-cards">
+            <div className="metric-card metric-progress" data-testid="metric-progress-card">
+              <span className="metric-label">Progress</span>
+              <span className="metric-value" data-testid="metric-progress-value">{progressInfo.progress}%</span>
+            </div>
             <div className="metric-card">
               <span className="metric-label">Total in Page</span>
               <span className="metric-value">{summary.total}</span>
@@ -328,6 +434,8 @@ export function TaskManagement({
             }}
             onReset={handleResetFilters}
             currentUserId={currentUser?._id}
+        currentUser={currentUser}
+        token={token}
             memberIds={memberIds}
             memberNames={memberNames}
           />
@@ -338,6 +446,8 @@ export function TaskManagement({
             isLoading={isLoading}
             error={error}
             currentUserId={currentUser?._id}
+        currentUser={currentUser}
+        token={token}
             isLeader={isLeader}
             memberNames={memberNames}
             onSelectTask={(task) => setSelectedTask(task)}
@@ -444,6 +554,8 @@ export function TaskManagement({
         }
         memberNames={memberNames}
         currentUserId={currentUser?._id}
+        currentUser={currentUser}
+        token={token}
         onOpenStatus={(task) => {
           setSelectedTask(null);
           setStatusTask(task);
@@ -464,6 +576,18 @@ export function TaskManagement({
           setDeletingTask(task);
           setModalError(null);
         }}
+      />
+
+      <ProjectMembersModal
+        isOpen={isMembersOpen}
+        onClose={() => setIsMembersOpen(false)}
+        projectId={projectId}
+        project={project}
+        token={token}
+        memberNames={memberNames}
+        onProjectUpdated={onProjectUpdated}
+        currentUser={currentUser}
+        allUsers={allUsers}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { taskService } from '../services/taskService';
 import { describe, it, expect, vi } from 'vitest';
 import { TaskCreateModal } from '../components/tasks/TaskCreateModal';
 import { TaskEditModal } from '../components/tasks/TaskEditModal';
@@ -203,7 +204,8 @@ describe('Task Modals', () => {
   });
 
   describe('TaskDetailsModal', () => {
-    it('displays complete task information and triggers actions', () => {
+    it('displays complete task information and triggers actions', async () => {
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: [] });
       const handleOpenEdit = vi.fn();
       render(
         <TaskDetailsModal
@@ -221,6 +223,200 @@ describe('Task Modals', () => {
 
       fireEvent.click(screen.getByTestId('detail-edit-btn'));
       expect(handleOpenEdit).toHaveBeenCalledWith(mockTask);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('no-comments-msg')).toBeInTheDocument();
+      });
+    });
+
+    it('renders Comments section, loads and displays existing comments with author and timestamp', async () => {
+      const mockComments = [
+        {
+          _id: 'comment-1',
+          taskId: 'task-100',
+          authorId: { _id: 'leader-1', name: 'Alice Leader' },
+          text: 'Please review the initial implementation.',
+          createdAt: '2026-10-29T10:00:00.000Z'
+        },
+        {
+          _id: 'comment-2',
+          taskId: 'task-100',
+          authorId: { _id: 'member-1', name: 'Bob Member' },
+          text: 'Tests are passing, ready for review.',
+          createdAt: '2026-10-29T11:00:00.000Z'
+        }
+      ];
+
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: mockComments });
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          isLeader={true}
+          token="test-token"
+        />
+      );
+
+      expect(screen.getByTestId('task-comments-section')).toBeInTheDocument();
+      expect(taskService.getTaskComments).toHaveBeenCalledWith('task-100', 'test-token');
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-item-comment-1')).toBeInTheDocument();
+        expect(screen.getByTestId('comment-item-comment-2')).toBeInTheDocument();
+      });
+
+      expect(screen.getByText('Alice Leader')).toBeInTheDocument();
+      expect(screen.getByText('Please review the initial implementation.')).toBeInTheDocument();
+      expect(screen.getByText('Bob Member')).toBeInTheDocument();
+      expect(screen.getByText('Tests are passing, ready for review.')).toBeInTheDocument();
+    });
+
+    it('displays empty state when no comments exist', async () => {
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: [] });
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          isLeader={false}
+          token="test-token"
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('no-comments-msg')).toHaveTextContent('No comments yet.');
+      });
+    });
+
+    it('displays error state when loading comments fails and allows retry', async () => {
+      vi.spyOn(taskService, 'getTaskComments')
+        .mockRejectedValueOnce(new Error('Network disconnected'))
+        .mockResolvedValueOnce({ comments: [] });
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          token="test-token"
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comments-load-error')).toHaveTextContent('Network disconnected');
+      });
+
+      fireEvent.click(screen.getByText('Retry'));
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('comments-load-error')).not.toBeInTheDocument();
+        expect(screen.getByTestId('no-comments-msg')).toBeInTheDocument();
+      });
+    });
+
+    it('rejects empty or whitespace-only comment submission', async () => {
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: [] });
+      const addCommentSpy = vi.spyOn(taskService, 'addComment');
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          token="test-token"
+          currentUser={{ _id: 'member-1', role: 'teamMember', name: 'Bob' }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-input')).toBeInTheDocument();
+      });
+
+      // Attempt empty submission
+      fireEvent.click(screen.getByTestId('add-comment-btn'));
+      expect(addCommentSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('comment-submit-error')).toHaveTextContent('Comment cannot be empty.');
+
+      // Attempt whitespace-only submission
+      fireEvent.change(screen.getByTestId('comment-input'), { target: { value: '    \t\n  ' } });
+      fireEvent.click(screen.getByTestId('add-comment-btn'));
+      expect(addCommentSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('comment-submit-error')).toHaveTextContent('Comment cannot be empty.');
+    });
+
+    it('submits valid comment, persists it, and renders the new comment with success message', async () => {
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: [] });
+      const newComment = {
+        _id: 'comment-999',
+        taskId: 'task-100',
+        authorId: { _id: 'member-1', name: 'Bob Member' },
+        text: 'Newly posted test comment',
+        createdAt: '2026-10-29T12:00:00.000Z'
+      };
+      vi.spyOn(taskService, 'addComment').mockResolvedValue({ comment: newComment });
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          token="test-token"
+          currentUser={{ _id: 'member-1', role: 'teamMember', name: 'Bob Member' }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-input')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByTestId('comment-input'), {
+        target: { value: 'Newly posted test comment' }
+      });
+      fireEvent.click(screen.getByTestId('add-comment-btn'));
+
+      await waitFor(() => {
+        expect(taskService.addComment).toHaveBeenCalledWith(
+          'task-100',
+          { text: 'Newly posted test comment' },
+          'test-token'
+        );
+        expect(screen.getByTestId('comment-success-alert')).toHaveTextContent('Comment added successfully.');
+        expect(screen.getByTestId('comment-item-comment-999')).toBeInTheDocument();
+        expect(screen.getByText('Newly posted test comment')).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId('comment-input')).toHaveValue('');
+    });
+
+    it('displays error message when adding comment fails', async () => {
+      vi.spyOn(taskService, 'getTaskComments').mockResolvedValue({ comments: [] });
+      vi.spyOn(taskService, 'addComment').mockRejectedValue(new Error('Server error while saving comment'));
+
+      render(
+        <TaskDetailsModal
+          isOpen={true}
+          onClose={vi.fn()}
+          task={mockTask}
+          token="test-token"
+          currentUser={{ _id: 'member-1', role: 'teamMember', name: 'Bob Member' }}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-input')).toBeInTheDocument();
+      });
+
+      fireEvent.change(screen.getByTestId('comment-input'), {
+        target: { value: 'Failing comment' }
+      });
+      fireEvent.click(screen.getByTestId('add-comment-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('comment-submit-error')).toHaveTextContent('Server error while saving comment');
+      });
     });
   });
 });
