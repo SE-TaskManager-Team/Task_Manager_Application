@@ -167,5 +167,31 @@ export const taskService = {
       body: JSON.stringify({ assigneeId })
     });
     return handleResponse(res);
+  },
+
+  /**
+   * GET /api/tasks/:id/comments
+   * Fetch comments for a task.
+   */
+  async getTaskComments(taskId, token) {
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/comments`, {
+      method: 'GET',
+      headers: getHeaders(token)
+    });
+    return handleResponse(res);
+  },
+
+  /**
+   * POST /api/tasks/:id/comments
+   * Add a new comment to a task.
+   */
+  async addComment(taskId, payload, token) {
+    const body = typeof payload === 'string' ? { text: payload } : payload;
+    const res = await fetch(`${API_BASE}/tasks/${taskId}/comments`, {
+      method: 'POST',
+      headers: getHeaders(token),
+      body: JSON.stringify(body)
+    });
+    return handleResponse(res);
   }
 };

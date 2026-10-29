@@ -1,4 +1,4 @@
-﻿const express = require('express');
+const express = require('express');
 const Project = require('../models/Project');
 const Task = require('../models/Task');
 const User = require('../models/User');
@@ -15,12 +15,10 @@ router.get('/', async (req, res, next) => {
 
     const projectFilter = role === 'admin'
       ? {}
-      : role === 'teamLeader'
-        ? { teamLeaderId: userId }
-        : { memberIds: userId };
+      : { $or: [{ teamLeaderId: userId }, { memberIds: userId }] };
 
     const projects = await Project.find(projectFilter)
-      .select('_id name teamLeaderId memberIds')
+      .select('_id name description teamLeaderId memberIds deadline')
       .lean();
 
     const projectIds = projects.map(project => project._id);
@@ -57,7 +55,7 @@ router.get('/', async (req, res, next) => {
       todoTasks,
       overdueTasks,
       completionPercentage: totalTasks
-        ? Math.round(completedTasks * 100 / totalTasks)
+        ? Math.round((completedTasks * 100) / totalTasks)
         : 0
     };
 
@@ -72,12 +70,14 @@ router.get('/', async (req, res, next) => {
       summary.activeUsers = activeUsers;
     }
 
-    if (role === 'teamLeader') {
-      data.projects = await Promise.all(projects.map(async project => {
+    data.projects = await Promise.all(
+      projects.map(async project => {
         const filter = { projectId: project._id };
-        const [total, completed, overdue] = await Promise.all([
+        const [total, completed, inProgress, todo, overdue] = await Promise.all([
           Task.countDocuments(filter),
           Task.countDocuments({ ...filter, status: 'completed' }),
+          Task.countDocuments({ ...filter, status: 'inProgress' }),
+          Task.countDocuments({ ...filter, status: 'todo' }),
           Task.countDocuments({
             ...filter,
             deadline: { $lt: now },
@@ -88,13 +88,32 @@ router.get('/', async (req, res, next) => {
         return {
           projectId: project._id,
           name: project.name,
+          description: project.description || '',
+          deadline: project.deadline || null,
           totalTasks: total,
           completedTasks: completed,
+          inProgressTasks: inProgress,
+          todoTasks: todo,
           overdueTasks: overdue,
-          progress: total ? Math.round(completed * 100 / total) : 0
+          progress: total ? Math.round((completed * 100) / total) : 0
         };
-      }));
-    }
+      })
+    );
+
+    const upcomingTasks = await Task.find({
+      ...taskFilter,
+      status: { $ne: 'completed' }
+    })
+      .sort({ deadline: 1 })
+      .limit(6)
+      .select('_id title priority deadline status projectId assigneeId')
+      .lean();
+
+    const projectNameMap = new Map(projects.map(p => [String(p._id), p.name]));
+    data.upcomingTasks = upcomingTasks.map(task => ({
+      ...task,
+      projectName: projectNameMap.get(String(task.projectId)) || 'Project'
+    }));
 
     return res.json({ success: true, data });
   } catch (error) {

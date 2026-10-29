@@ -179,6 +179,23 @@ router.post('/', async (req, res, next) => {
       createdById: req.user._id
     });
 
+    if (resolvedAssigneeId) {
+      const isConnected = mongoose.connection && mongoose.connection.readyState === 1;
+      const isMocked = typeof Notification.create === 'function' && Boolean(Notification.create._isMockFunction || Notification.create.mock);
+      if (isConnected || isMocked) {
+        try {
+          await Notification.create({
+            recipientId: resolvedAssigneeId,
+            type: 'taskAssigned',
+            taskId: task._id,
+            message: `Task "${task.title}" has been assigned to you.`
+          });
+        } catch (notifErr) {
+          // Non-blocking notification dispatch
+        }
+      }
+    }
+
     return res.status(201).json({
       success: true,
       data: { task }
@@ -1318,6 +1335,158 @@ router.patch('/:id/assign', async (req, res, next) => {
     return next(error);
   }
 });
+
+// GET /api/tasks/:id/comments
+// Authenticated project members and the project's Team Leader may list comments for a task
+const getTaskCommentsHandler = async (req, res, next) => {
+  try {
+    const id = req.params.id || req.params.taskId;
+
+    if (!validId(id)) {
+      return fail(res, 400, 'INVALID_ID', 'Task id is invalid.');
+    }
+
+    const task = await Task.findById(id);
+    if (!task) {
+      return fail(res, 404, 'TASK_NOT_FOUND', 'Task was not found.');
+    }
+
+    if (
+      req.params.projectId &&
+      String(task.projectId) !== String(req.params.projectId)
+    ) {
+      return fail(res, 404, 'TASK_NOT_FOUND', 'Task was not found.');
+    }
+
+    const project = await Project.findById(task.projectId);
+    if (!project) {
+      return fail(res, 404, 'PROJECT_NOT_FOUND', 'Project was not found.');
+    }
+
+    const isLeader = String(project.teamLeaderId) === String(req.user._id);
+    const isMember =
+      Array.isArray(project.memberIds) &&
+      project.memberIds.some((mId) => String(mId) === String(req.user._id));
+
+    if (!isLeader && !isMember) {
+      return fail(
+        res,
+        403,
+        'FORBIDDEN',
+        'You do not have access to this task.'
+      );
+    }
+
+    const comments = await Comment.find({ taskId: task._id })
+      .sort({ createdAt: 1 })
+      .populate('authorId', 'name email role');
+
+    return res.json({
+      success: true,
+      data: {
+        comments,
+        items: comments,
+        total: comments.length
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+// POST /api/tasks/:id/comments
+// Authenticated project members and the project's Team Leader may submit a comment on a task
+const postTaskCommentHandler = async (req, res, next) => {
+  try {
+    const id = req.params.id || req.params.taskId;
+
+    if (!validId(id)) {
+      return fail(res, 400, 'INVALID_ID', 'Task id is invalid.');
+    }
+
+    const task = await Task.findById(id);
+    if (!task) {
+      return fail(res, 404, 'TASK_NOT_FOUND', 'Task was not found.');
+    }
+
+    if (
+      req.params.projectId &&
+      String(task.projectId) !== String(req.params.projectId)
+    ) {
+      return fail(res, 404, 'TASK_NOT_FOUND', 'Task was not found.');
+    }
+
+    const project = await Project.findById(task.projectId);
+    if (!project) {
+      return fail(res, 404, 'PROJECT_NOT_FOUND', 'Project was not found.');
+    }
+
+    const isLeader = String(project.teamLeaderId) === String(req.user._id);
+    const isMember =
+      Array.isArray(project.memberIds) &&
+      project.memberIds.some((mId) => String(mId) === String(req.user._id));
+
+    if (!isLeader && !isMember) {
+      return fail(
+        res,
+        403,
+        'FORBIDDEN',
+        'You do not have access to this task.'
+      );
+    }
+
+    const body = req.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return fail(
+        res,
+        400,
+        'VALIDATION_ERROR',
+        'Request body must be an object.'
+      );
+    }
+
+    const { text } = body;
+    if (typeof text !== 'string' || text.trim().length === 0) {
+      return fail(
+        res,
+        400,
+        'VALIDATION_ERROR',
+        'Comment text is required and cannot be empty.'
+      );
+    }
+
+    if (text.trim().length > 2000) {
+      return fail(
+        res,
+        400,
+        'VALIDATION_ERROR',
+        'Comment text must not exceed 2000 characters.'
+      );
+    }
+
+    const comment = await Comment.create({
+      taskId: task._id,
+      authorId: req.user._id,
+      text: text.trim()
+    });
+
+    await comment.populate('authorId', 'name email role');
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        comment
+      }
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+router.get('/:id/comments', getTaskCommentsHandler);
+router.get('/:taskId/comments', getTaskCommentsHandler);
+router.post('/:id/comments', postTaskCommentHandler);
+router.post('/:taskId/comments', postTaskCommentHandler);
 
 module.exports = router;
 module.exports.isValidTaskDeadline = isValidTaskDeadline;

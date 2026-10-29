@@ -90,3 +90,6 @@ export function formatDeadline(deadlineString) {
     return String(deadlineString);
   }
 }
+
+export const TaskStatusBadge = StatusBadge;
+export const TaskPriorityBadge = PriorityBadge;

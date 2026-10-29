@@ -136,6 +136,8 @@ export function MyTasksView({ token, currentUser }) {
         isLeader={false}
         isAssignee={true}
         currentUserId={currentUser?._id}
+        currentUser={currentUser}
+        token={token}
         onOpenStatus={(task) => {
           setSelectedTask(null);
           setStatusTask(task);

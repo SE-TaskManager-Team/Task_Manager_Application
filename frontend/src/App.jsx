@@ -1,10 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { TaskManagement } from "./components/tasks/TaskManagement";
+import { ProjectCreateModal } from "./components/projects/ProjectCreateModal";
+import { DashboardView } from "./components/dashboard/DashboardView";
 import { authService } from "./services/authService";
 import { projectService } from "./services/projectService";
+import { userService } from "./services/userService";
 import { AdminUserManagement } from "./components/admin/AdminUserManagement";
+import { NotificationBell } from "./components/notifications/NotificationBell";
 import "./styles/tasks.css";
 import "./styles/auth.css";
+import "./styles/notifications.css";
 
 const getId = (value) => String(value?._id ?? value);
 
@@ -205,6 +210,7 @@ function LoginScreen({ onLogin, onRegister }) {
 
 function App() {
     const [session, setSession] = useState(null);
+    const [currentView, setCurrentView] = useState("dashboard");
     const [projects, setProjects] = useState([]);
     const [selectedProjectId, setSelectedProjectId] = useState("");
     const [isInitializing, setIsInitializing] = useState(true);
@@ -212,11 +218,19 @@ function App() {
     const [authError, setAuthError] = useState(null);
     const [projectError, setProjectError] = useState(null);
 
+    const [isCreateProjectOpen, setIsCreateProjectOpen] = useState(false);
+    const [isCreatingProject, setIsCreatingProject] = useState(false);
+    const [createProjectError, setCreateProjectError] = useState(null);
+    const [allUsers, setAllUsers] = useState([]);
+
     const handleUnauthorized = useCallback(() => {
         authService.clearSession();
         setSession(null);
         setProjects([]);
         setSelectedProjectId("");
+        setAllUsers([]);
+        setIsCreateProjectOpen(false);
+        setCreateProjectError(null);
         setAuthError(
             "Your session has expired or been logged out. Please sign in again.",
         );
@@ -237,7 +251,7 @@ function App() {
     }, [handleUnauthorized]);
 
     const loadProjects = useCallback(
-        async (token) => {
+        async (token, selectId) => {
             setIsLoadingProjects(true);
             setProjectError(null);
 
@@ -246,6 +260,12 @@ function App() {
                 const items = Array.isArray(data.items) ? data.items : [];
                 setProjects(items);
                 setSelectedProjectId((currentId) => {
+                    if (
+                        selectId &&
+                        items.some((project) => getId(project) === selectId)
+                    ) {
+                        return selectId;
+                    }
                     if (
                         currentId &&
                         items.some((project) => getId(project) === currentId)
@@ -275,6 +295,21 @@ function App() {
         }
     }, [session, loadProjects]);
 
+    useEffect(() => {
+        if (session?.token && session?.user?.role === "teamLeader") {
+            userService
+                .getUsers(session.token)
+                .then((data) => {
+                    setAllUsers(Array.isArray(data?.items) ? data.items : []);
+                })
+                .catch(() => {
+                    // Non-critical, fallback to Member (ID)
+                });
+        } else {
+            setAllUsers([]);
+        }
+    }, [session]);
+
     const handleLogin = async (email, password) => {
         setAuthError(null);
         const nextSession = await authService.login(email, password);
@@ -288,14 +323,71 @@ function App() {
     const handleLogout = async () => {
         const token = session?.token;
         setSession(null);
+        setCurrentView("dashboard");
         setProjects([]);
         setSelectedProjectId("");
+        setAllUsers([]);
+        setIsCreateProjectOpen(false);
+        setCreateProjectError(null);
         try {
             await authService.logout(token);
         } catch (_error) {
             // authService clears the local session even if the server logout fails.
         }
     };
+
+    const handleNavigateToTasks = (projectId) => {
+        if (projectId) {
+            setSelectedProjectId(String(projectId));
+        }
+        setCurrentView("tasks");
+    };
+
+    const handleOpenCreateProject = () => {
+        setCreateProjectError(null);
+        setIsCreateProjectOpen(true);
+    };
+
+    const handleCloseCreateProject = () => {
+        setIsCreateProjectOpen(false);
+        setCreateProjectError(null);
+    };
+
+    const handleCreateProject = async (projectData) => {
+        setIsCreatingProject(true);
+        setCreateProjectError(null);
+
+        try {
+            const data = await projectService.createProject(
+                projectData,
+                session.token,
+            );
+            const createdProject = data?.project;
+            const newProjectId = getId(createdProject);
+            setIsCreateProjectOpen(false);
+            await loadProjects(session.token, newProjectId);
+            setCurrentView("tasks");
+        } catch (err) {
+            if (err.status === 401) {
+                handleUnauthorized();
+            } else {
+                setCreateProjectError(
+                    err.message || "Failed to create project.",
+                );
+            }
+        } finally {
+            setIsCreatingProject(false);
+        }
+    };
+
+    const handleProjectUpdated = useCallback((updatedProject) => {
+        if (!updatedProject?._id) return;
+        setProjects((prev) =>
+            prev.map((p) =>
+                getId(p) === getId(updatedProject) ? updatedProject : p,
+            ),
+        );
+    }, []);
 
     const selectedProject = useMemo(
         () =>
@@ -307,14 +399,18 @@ function App() {
     const memberNames = useMemo(() => {
         const names = {};
 
-        // The API intentionally exposes member IDs rather than another user's
-        // private profile data. The current user's name is safe to display.
         if (session?.user?._id) {
             names[getId(session.user)] = session.user.name;
         }
 
+        allUsers.forEach((u) => {
+            if (u?._id) {
+                names[getId(u)] = u.name;
+            }
+        });
+
         return names;
-    }, [session]);
+    }, [session, allUsers]);
 
     if (isInitializing) {
         return (
@@ -335,10 +431,18 @@ function App() {
             <header className="app-header">
                 <div>
                     <strong>🚀 Task Manager</strong>
-                    <span className="app-header-subtitle">Task Management</span>
+                    <span className="app-header-subtitle">
+                        {currentView === "dashboard"
+                            ? "User Dashboard"
+                            : "Task Management"}
+                    </span>
                 </div>
 
                 <div className="app-header-user">
+                    <NotificationBell
+                        token={session.token}
+                        currentUser={session.user}
+                    />
                     <div className="app-user-details">
                         <strong>{session.user.name}</strong>
                         <span>{session.user.role}</span>
@@ -354,6 +458,25 @@ function App() {
                 </div>
             </header>
 
+            <nav className="app-nav-bar" aria-label="Main Navigation">
+                <button
+                    type="button"
+                    className={`app-nav-btn ${currentView === "dashboard" ? "active" : ""}`}
+                    onClick={() => setCurrentView("dashboard")}
+                    data-testid="nav-dashboard"
+                >
+                    📊 Dashboard
+                </button>
+                <button
+                    type="button"
+                    className={`app-nav-btn ${currentView === "tasks" ? "active" : ""}`}
+                    onClick={() => setCurrentView("tasks")}
+                    data-testid="nav-tasks"
+                >
+                    📋 Task Management
+                </button>
+            </nav>
+
             <main>
                 {authError && (
                     <div className="app-alert app-alert-error" role="alert">
@@ -361,67 +484,139 @@ function App() {
                     </div>
                 )}
 
-                {session.user.role === "admin" && (
-                    <AdminUserManagement
-                        token={session.token}
+                <div
+                    data-testid="dashboard-view-container"
+                    className={
+                        currentView === "dashboard"
+                            ? "app-view-active"
+                            : "app-view-inactive"
+                    }
+                >
+                    <DashboardView
                         currentUser={session.user}
+                        token={session.token}
+                        onNavigateToTasks={handleNavigateToTasks}
+                        onCreateProject={handleOpenCreateProject}
                     />
-                )}
+                </div>
 
-                {isLoadingProjects ? (
-                    <div className="app-state">Loading your projects…</div>
-                ) : projectError ? (
-                    <div className="app-state app-state-error" role="alert">
-                        {projectError}
+                <div
+                    data-testid="tasks-view-container"
+                    className={
+                        currentView === "tasks"
+                            ? "app-view-active"
+                            : "app-view-inactive"
+                    }
+                >
+                    <div style={{ marginBottom: "1rem" }}>
                         <button
                             type="button"
-                            className="btn btn-secondary"
-                            onClick={() => loadProjects(session.token)}
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setCurrentView("dashboard")}
+                            data-testid="back-to-dashboard-btn"
                         >
-                            Retry
+                            ← Back to Dashboard
                         </button>
                     </div>
-                ) : projects.length === 0 ? (
-                    <div className="app-state">
-                        <h2>No projects available</h2>
-                        <p>
-                            Your authenticated account is valid, but you do not
-                            currently have access to a project.
-                        </p>
-                    </div>
-                ) : (
-                    <>
-                        <div className="project-toolbar">
-                            <label htmlFor="project-select">Project</label>
-                            <select
-                                id="project-select"
-                                data-testid="project-select"
-                                value={selectedProjectId}
-                                onChange={(event) =>
-                                    setSelectedProjectId(event.target.value)
-                                }
-                            >
-                                {projects.map((project) => (
-                                    <option
-                                        key={getId(project)}
-                                        value={getId(project)}
-                                    >
-                                        {project.name}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
 
-                        {selectedProject && (
-                            <TaskManagement
-                                projectId={selectedProjectId}
-                                project={selectedProject}
-                                currentUser={session.user}
-                                token={session.token}
-                                memberNames={memberNames}
-                            />
-                        )}
-                    </>
+                    {session.user.role === "admin" && (
+                        <AdminUserManagement
+                            token={session.token}
+                            currentUser={session.user}
+                        />
+                    )}
+
+                    {isLoadingProjects ? (
+                        <div className="app-state">Loading your projects…</div>
+                    ) : projectError ? (
+                        <div className="app-state app-state-error" role="alert">
+                            {projectError}
+                            <button
+                                type="button"
+                                className="btn btn-secondary"
+                                onClick={() => loadProjects(session.token)}
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    ) : projects.length === 0 ? (
+                        <div className="app-state">
+                            <h2>No projects available</h2>
+                            <p>
+                                Your authenticated account is valid, but you do
+                                not currently have access to a project.
+                            </p>
+                            {session.user.role === "teamLeader" && (
+                                <div style={{ marginTop: "1.25rem" }}>
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={handleOpenCreateProject}
+                                        data-testid="create-project-btn"
+                                    >
+                                        + Create Project
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <>
+                            <div className="project-toolbar">
+                                <label htmlFor="project-select">Project</label>
+                                <select
+                                    id="project-select"
+                                    data-testid="project-select"
+                                    value={selectedProjectId}
+                                    onChange={(event) =>
+                                        setSelectedProjectId(event.target.value)
+                                    }
+                                >
+                                    {projects.map((project) => (
+                                        <option
+                                            key={getId(project)}
+                                            value={getId(project)}
+                                        >
+                                            {project.name}
+                                        </option>
+                                    ))}
+                                </select>
+
+                                {session.user.role === "teamLeader" && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={handleOpenCreateProject}
+                                        data-testid="create-project-btn"
+                                    >
+                                        + Create Project
+                                    </button>
+                                )}
+                            </div>
+
+                            {selectedProject && (
+                                <TaskManagement
+                                    projectId={selectedProjectId}
+                                    project={selectedProject}
+                                    currentUser={session.user}
+                                    token={session.token}
+                                    memberNames={memberNames}
+                                    onProjectUpdated={handleProjectUpdated}
+                                    allUsers={allUsers}
+                                />
+                            )}
+                        </>
+                    )}
+                </div>
+
+                {session.user.role === "teamLeader" && (
+                    <ProjectCreateModal
+                        isOpen={isCreateProjectOpen}
+                        onClose={handleCloseCreateProject}
+                        onSubmit={handleCreateProject}
+                        isSubmitting={isCreatingProject}
+                        error={createProjectError}
+                        currentUser={session.user}
+                    />
                 )}
             </main>
         </div>
