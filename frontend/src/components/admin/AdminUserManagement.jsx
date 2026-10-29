@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { userService } from '../../services/userService';
+import { UserCreateModal } from './UserCreateModal';
 
 // These values intentionally match the existing backend User schema.
 const ROLES = [
@@ -15,6 +16,10 @@ export function AdminUserManagement({ token, currentUser }) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
   const loadUsers = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -29,6 +34,21 @@ export function AdminUserManagement({ token, currentUser }) {
   }, [token]);
 
   useEffect(() => { loadUsers(); }, [loadUsers]);
+
+  const handleCreateUser = async (userData) => {
+    setIsCreating(true);
+    setCreateError('');
+    try {
+      const data = await userService.createUser(token, userData);
+      setIsCreateOpen(false);
+      setMessage(`User ${data.user?.name || userData.name} created successfully.`);
+      await loadUsers();
+    } catch (err) {
+      setCreateError(err.message || 'Could not create user.');
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const changeRole = async (user, role) => {
     if (role === user.role) return;
@@ -70,9 +90,22 @@ export function AdminUserManagement({ token, currentUser }) {
           <h2 id="admin-users-title">User and role management</h2>
           <p>Only administrators can change roles or deactivate accounts.</p>
         </div>
-        <button type="button" className="btn btn-secondary" onClick={loadUsers} disabled={loading}>
-          {loading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div className="admin-users-actions" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setCreateError('');
+              setIsCreateOpen(true);
+            }}
+            data-testid="create-user-btn"
+          >
+            + Create User
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={loadUsers} disabled={loading}>
+            {loading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {error && <p className="admin-message admin-message-error" role="alert">{error}</p>}
@@ -97,7 +130,7 @@ export function AdminUserManagement({ token, currentUser }) {
                     </td>
                     <td><span className={user.isActive ? 'admin-status-active' : 'admin-status-inactive'}>{user.isActive ? 'Active' : 'Inactive'}</span></td>
                     <td>
-                      <button type="button" className="admin-deactivate-button" disabled={busy || isSelf || !user.isActive} onClick={() => deactivate(user)}>
+                      <button type="button" className="admin-deactivate-button" aria-label={`Deactivate ${user.name}`} disabled={busy || isSelf || !user.isActive} onClick={() => deactivate(user)}>
                         {busy ? 'Saving…' : 'Deactivate'}
                       </button>
                     </td>
@@ -109,6 +142,18 @@ export function AdminUserManagement({ token, currentUser }) {
         </div>
       )}
       <p className="admin-users-note">Your backend roles are <code>admin</code>, <code>teamLeader</code>, and <code>teamMember</code>; public signup always creates a team member.</p>
+
+      <UserCreateModal
+        isOpen={isCreateOpen}
+        onClose={() => {
+          setIsCreateOpen(false);
+          setCreateError('');
+        }}
+        onSubmit={handleCreateUser}
+        isSubmitting={isCreating}
+        error={createError}
+        currentUser={currentUser}
+      />
     </section>
   );
 }

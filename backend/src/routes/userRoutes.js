@@ -6,16 +6,67 @@ const { hashPassword } = require('../utils/security');
 const router = express.Router();
 const fail = (res, status, code, message) => res.status(status).json({ success: false, error: { code, message } });
 const validId = (id) => /^[a-f\d]{24}$/i.test(id);
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 router.use(authenticate);
 
-router.get('/', authorize('admin'), async (req, res, next) => {
+router.post('/', authorize('admin'), async (req, res, next) => {
+  try {
+    const { name, email, password, role } = req.body || {};
+    if (
+      typeof name !== 'string' ||
+      name.trim().length < 2 ||
+      name.trim().length > 80 ||
+      typeof email !== 'string' ||
+      !emailPattern.test(email.trim()) ||
+      email.trim().length > 254 ||
+      typeof password !== 'string' ||
+      password.length < 8 ||
+      password.length > 128
+    ) {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Provide a valid name (2–80 characters), email, and password (8–128 characters).');
+    }
+
+    const assignedRole = role !== undefined ? role : 'teamMember';
+    if (!['admin', 'teamLeader', 'teamMember'].includes(assignedRole)) {
+      return fail(res, 400, 'VALIDATION_ERROR', 'Role must be admin, teamLeader, or teamMember.');
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    if (await User.exists({ email: normalizedEmail })) {
+      return fail(res, 409, 'EMAIL_IN_USE', 'An account with this email already exists.');
+    }
+
+    const passwordHash = await hashPassword(password);
+    const user = await User.create({
+      name: name.trim(),
+      email: normalizedEmail,
+      passwordHash,
+      role: assignedRole,
+      isActive: true
+    });
+
+    return res.status(201).json({ success: true, data: { user: user.toJSON() } });
+  } catch (error) {
+    if (error.code === 11000) {
+      return fail(res, 409, 'EMAIL_IN_USE', 'An account with this email already exists.');
+    }
+    return next(error);
+  }
+});
+
+router.get('/', authorize('admin', 'teamLeader'), async (req, res, next) => {
   try {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const filter = {};
-    if (['admin', 'teamLeader', 'teamMember'].includes(req.query.role)) filter.role = req.query.role;
-    if (req.query.isActive === 'true' || req.query.isActive === 'false') filter.isActive = req.query.isActive === 'true';
+    if (req.user.role === 'teamLeader') {
+      filter.role = 'teamMember';
+      filter.isActive = true;
+    } else {
+      if (['admin', 'teamLeader', 'teamMember'].includes(req.query.role)) filter.role = req.query.role;
+      if (req.query.isActive === 'true' || req.query.isActive === 'false') filter.isActive = req.query.isActive === 'true';
+    }
     const [items, total] = await Promise.all([
       User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
       User.countDocuments(filter)
