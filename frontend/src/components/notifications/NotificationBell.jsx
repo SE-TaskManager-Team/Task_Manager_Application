@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { notificationService } from '../../services/notificationService';
 
-export function NotificationBell({ token, currentUser }) {
+export function NotificationBell({ token, currentUser, onNotificationClick }) {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -61,26 +61,53 @@ export function NotificationBell({ token, currentUser }) {
   };
 
   const handleMarkAsRead = async (id) => {
+    // Immediately and optimistically mark as read and decrement unread count
+    setNotifications((prev) =>
+      prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+    );
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+
     try {
       await notificationService.markAsRead(id, token);
-      setNotifications((prev) =>
-        prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (err) {
       setError(err.message || 'Failed to mark notification as read.');
+      fetchNotifications();
     }
   };
 
   const handleMarkAllAsRead = async () => {
+    // Immediately and optimistically mark all as read and reset unread count
+    setNotifications((prev) =>
+      prev.map((n) => ({ ...n, isRead: true }))
+    );
+    setUnreadCount(0);
+
     try {
       await notificationService.markAllAsRead(token);
-      setNotifications((prev) =>
-        prev.map((n) => ({ ...n, isRead: true }))
-      );
-      setUnreadCount(0);
     } catch (err) {
       setError(err.message || 'Failed to mark all as read.');
+      fetchNotifications();
+    }
+  };
+
+  const handleNotificationItemClick = (item, event) => {
+    // If the click originated from an action button (such as "Mark read"), do not navigate
+    if (event && event.target && event.target.closest('button')) {
+      return;
+    }
+
+    // 5. Mark as read if not already read
+    // 6. Update unread notification count immediately
+    if (!item.isRead) {
+      handleMarkAsRead(item._id);
+    }
+
+    // 7. Close notification dropdown after navigation
+    setIsOpen(false);
+
+    // 1-4. Notify parent to navigate and open the task
+    if (onNotificationClick) {
+      onNotificationClick(item);
     }
   };
 
@@ -159,6 +186,15 @@ export function NotificationBell({ token, currentUser }) {
                   key={item._id}
                   className={`notification-item ${!item.isRead ? 'unread' : ''}`}
                   data-testid={`notification-item-${item._id}`}
+                  onClick={(e) => handleNotificationItemClick(item, e)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleNotificationItemClick(item, e);
+                    }
+                  }}
                 >
                   <div className="notification-item-body">
                     <span className="notification-icon">
@@ -177,7 +213,10 @@ export function NotificationBell({ token, currentUser }) {
                       <button
                         type="button"
                         className="notification-mark-read-btn"
-                        onClick={() => handleMarkAsRead(item._id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMarkAsRead(item._id);
+                        }}
                         data-testid={`btn-mark-read-${item._id}`}
                       >
                         Mark read

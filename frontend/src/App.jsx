@@ -5,6 +5,7 @@ import { DashboardView } from "./components/dashboard/DashboardView";
 import { authService } from "./services/authService";
 import { projectService } from "./services/projectService";
 import { userService } from "./services/userService";
+import { taskService } from "./services/taskService";
 import { AdminUserManagement } from "./components/admin/AdminUserManagement";
 import { NotificationBell } from "./components/notifications/NotificationBell";
 import "./styles/tasks.css";
@@ -222,6 +223,8 @@ function App() {
     const [isCreatingProject, setIsCreatingProject] = useState(false);
     const [createProjectError, setCreateProjectError] = useState(null);
     const [allUsers, setAllUsers] = useState([]);
+    const [openedTask, setOpenedTask] = useState(null);
+    const [taskNavigationError, setTaskNavigationError] = useState(null);
 
     const handleUnauthorized = useCallback(() => {
         authService.clearSession();
@@ -229,6 +232,8 @@ function App() {
         setProjects([]);
         setSelectedProjectId("");
         setAllUsers([]);
+        setOpenedTask(null);
+        setTaskNavigationError(null);
         setIsCreateProjectOpen(false);
         setCreateProjectError(null);
         setAuthError(
@@ -327,12 +332,83 @@ function App() {
         setProjects([]);
         setSelectedProjectId("");
         setAllUsers([]);
+        setOpenedTask(null);
+        setTaskNavigationError(null);
         setIsCreateProjectOpen(false);
         setCreateProjectError(null);
         try {
             await authService.logout(token);
         } catch (_error) {
             // authService clears the local session even if the server logout fails.
+        }
+    };
+
+    const handleNotificationClick = async (notification) => {
+        setTaskNavigationError(null);
+        const taskId = notification?.taskId?._id || notification?.taskId;
+        if (!taskId) {
+            setTaskNavigationError(
+                "This notification does not reference a valid task.",
+            );
+            return;
+        }
+
+        try {
+            const data = await taskService.getTaskById(taskId, session.token);
+            const task = data?.task || data;
+            if (!task || !task._id) {
+                setTaskNavigationError(
+                    "This task is no longer available or was deleted.",
+                );
+                return;
+            }
+
+            const taskProjectId = getId(task.projectId);
+            if (taskProjectId) {
+                let currentProjects = projects;
+                if (!currentProjects.some((p) => getId(p) === taskProjectId)) {
+                    try {
+                        const projData = await projectService.getProjects(
+                            session.token,
+                        );
+                        currentProjects = Array.isArray(projData?.items)
+                            ? projData.items
+                            : [];
+                        setProjects(currentProjects);
+                    } catch (_err) {
+                        // ignore
+                    }
+                }
+
+                if (
+                    currentProjects.length > 0 &&
+                    !currentProjects.some((p) => getId(p) === taskProjectId)
+                ) {
+                    setTaskNavigationError(
+                        "You do not have access to view this task's project.",
+                    );
+                    return;
+                }
+
+                setSelectedProjectId(taskProjectId);
+            }
+
+            setOpenedTask(task);
+            setCurrentView("tasks");
+        } catch (err) {
+            if (err.status === 404 || err.code === "TASK_NOT_FOUND") {
+                setTaskNavigationError(
+                    "This task is no longer available or was deleted.",
+                );
+            } else if (err.status === 403 || err.code === "FORBIDDEN") {
+                setTaskNavigationError(
+                    "You do not have permission to view this task.",
+                );
+            } else {
+                setTaskNavigationError(
+                    err.message || "Unable to open task details.",
+                );
+            }
         }
     };
 
@@ -442,6 +518,7 @@ function App() {
                     <NotificationBell
                         token={session.token}
                         currentUser={session.user}
+                        onNotificationClick={handleNotificationClick}
                     />
                     <div className="app-user-details">
                         <strong>{session.user.name}</strong>
@@ -481,6 +558,36 @@ function App() {
                 {authError && (
                     <div className="app-alert app-alert-error" role="alert">
                         {authError}
+                    </div>
+                )}
+
+                {taskNavigationError && (
+                    <div
+                        className="app-alert app-alert-error"
+                        role="alert"
+                        data-testid="notification-task-error"
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                        }}
+                    >
+                        <span>{taskNavigationError}</span>
+                        <button
+                            type="button"
+                            className="btn-close-sm"
+                            onClick={() => setTaskNavigationError(null)}
+                            aria-label="Dismiss error"
+                            style={{
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: "1rem",
+                                color: "inherit",
+                            }}
+                        >
+                            ✕
+                        </button>
                     </div>
                 )}
 
@@ -602,6 +709,8 @@ function App() {
                                     memberNames={memberNames}
                                     onProjectUpdated={handleProjectUpdated}
                                     allUsers={allUsers}
+                                    openedTask={openedTask}
+                                    onClearOpenedTask={() => setOpenedTask(null)}
                                 />
                             )}
                         </>

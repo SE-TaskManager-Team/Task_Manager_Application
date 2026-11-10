@@ -20,7 +20,9 @@ export function TaskManagement({
   token,
   memberNames = {},
   onProjectUpdated,
-  allUsers = []
+  allUsers = [],
+  openedTask = null,
+  onClearOpenedTask
 }) {
   const [activeTab, setActiveTab] = useState('project'); // 'project' | 'my'
   const [tasks, setTasks] = useState([]);
@@ -52,6 +54,17 @@ export function TaskManagement({
   const [statusTask, setStatusTask] = useState(null);
   const [deletingTask, setDeletingTask] = useState(null);
   const [selectedTask, setSelectedTask] = useState(null);
+
+  // Automatically open task details when openedTask is provided (e.g. from notification click)
+  useEffect(() => {
+    if (openedTask) {
+      setSelectedTask(openedTask);
+      setActiveTab('project');
+      if (onClearOpenedTask) {
+        onClearOpenedTask();
+      }
+    }
+  }, [openedTask, onClearOpenedTask]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState(null);
