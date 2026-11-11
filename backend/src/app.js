@@ -1,3 +1,4 @@
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -23,21 +24,24 @@ const app = express();
 // Security headers
 app.use(helmet());
 
-// Restrict cross-origin browser requests to configured frontend origins.
+// Allow local frontend development origins.
 const allowedOrigins = (
-  process.env.FRONTEND_ORIGIN || 'http://localhost:5173'
+  process.env.FRONTEND_ORIGIN ||
+  'http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173'
 )
   .split(',')
   .map(origin => origin.trim())
   .filter(Boolean);
 
 app.use(cors({
-  origin(origin, callback) {
+  origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    return callback(new Error('Origin not allowed by CORS'));
+    return callback(
+      new Error(`Origin not allowed by CORS: ${origin}`)
+    );
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
