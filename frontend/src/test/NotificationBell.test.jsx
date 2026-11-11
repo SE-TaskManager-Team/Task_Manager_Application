@@ -182,4 +182,129 @@ describe('NotificationBell Component (TM-F-017 / TC-NOTIF-01)', () => {
     );
     expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument();
   });
+
+  it('clicking an unread notification item triggers onNotificationClick, marks as read, updates unread count immediately, and closes dropdown', async () => {
+    vi.spyOn(notificationService, 'getNotifications').mockResolvedValue({
+      items: sampleNotifications,
+      total: 2,
+      unreadCount: 1,
+      page: 1,
+      pages: 1
+    });
+
+    const markReadSpy = vi.spyOn(notificationService, 'markAsRead').mockResolvedValue({
+      notification: { ...sampleNotifications[0], isRead: true }
+    });
+
+    const onNotificationClick = vi.fn();
+
+    render(
+      <NotificationBell
+        token={token}
+        currentUser={currentUser}
+        onNotificationClick={onNotificationClick}
+      />
+    );
+
+    // Open dropdown
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(await screen.findByTestId('notification-dropdown')).toBeInTheDocument();
+
+    // Click on unread notification item (not the button)
+    const itemEl = screen.getByTestId('notification-item-notif-101');
+    fireEvent.click(itemEl);
+
+    // Dropdown closes immediately
+    expect(screen.queryByTestId('notification-dropdown')).not.toBeInTheDocument();
+
+    // onNotificationClick was called with notification item
+    expect(onNotificationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: 'notif-101', taskId: 'task-1' })
+    );
+
+    // Marked as read
+    expect(markReadSpy).toHaveBeenCalledWith('notif-101', token);
+
+    // Badge updated immediately (decremented to 0 -> badge removed)
+    expect(screen.queryByTestId('notification-badge')).not.toBeInTheDocument();
+  });
+
+  it('clicking an already read notification item calls onNotificationClick and closes dropdown without re-marking as read', async () => {
+    vi.spyOn(notificationService, 'getNotifications').mockResolvedValue({
+      items: sampleNotifications,
+      total: 2,
+      unreadCount: 1,
+      page: 1,
+      pages: 1
+    });
+
+    const markReadSpy = vi.spyOn(notificationService, 'markAsRead');
+    const onNotificationClick = vi.fn();
+
+    render(
+      <NotificationBell
+        token={token}
+        currentUser={currentUser}
+        onNotificationClick={onNotificationClick}
+      />
+    );
+
+    // Open dropdown
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(await screen.findByTestId('notification-dropdown')).toBeInTheDocument();
+
+    // notif-102 is already read
+    const readItem = screen.getByTestId('notification-item-notif-102');
+    fireEvent.click(readItem);
+
+    // Dropdown closed
+    expect(screen.queryByTestId('notification-dropdown')).not.toBeInTheDocument();
+
+    // Called onNotificationClick
+    expect(onNotificationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: 'notif-102', taskId: 'task-2' })
+    );
+
+    // markAsRead was NOT called
+    expect(markReadSpy).not.toHaveBeenCalled();
+  });
+
+  it('clicking Mark read button marks as read without triggering onNotificationClick or closing dropdown', async () => {
+    vi.spyOn(notificationService, 'getNotifications').mockResolvedValue({
+      items: sampleNotifications,
+      total: 2,
+      unreadCount: 1,
+      page: 1,
+      pages: 1
+    });
+
+    const markReadSpy = vi.spyOn(notificationService, 'markAsRead').mockResolvedValue({
+      notification: { ...sampleNotifications[0], isRead: true }
+    });
+
+    const onNotificationClick = vi.fn();
+
+    render(
+      <NotificationBell
+        token={token}
+        currentUser={currentUser}
+        onNotificationClick={onNotificationClick}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(await screen.findByTestId('notification-dropdown')).toBeInTheDocument();
+
+    const markReadBtn = screen.getByTestId('btn-mark-read-notif-101');
+    fireEvent.click(markReadBtn);
+
+    // Dropdown stays open
+    expect(screen.getByTestId('notification-dropdown')).toBeInTheDocument();
+
+    // onNotificationClick is NOT called
+    expect(onNotificationClick).not.toHaveBeenCalled();
+
+    // markAsRead was called
+    expect(markReadSpy).toHaveBeenCalledWith('notif-101', token);
+  });
 });
